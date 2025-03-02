@@ -4,7 +4,6 @@ import streamlit as st
 import requests
 import google.generativeai as genai
 from datetime import datetime
-from telecom_mock_data import SYSTEM_PROMPT, get_relevant_queries, TELECOM_QUERIES
 
 st.title("LLM Chat App with Memory 🧠")
 st.caption("Conversational chatbot with personalized memory layer")
@@ -14,13 +13,6 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "current_session" not in st.session_state:
     st.session_state.current_session = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
-# Add conversation context tracking
-if "context" not in st.session_state:
-    st.session_state.context = {
-        "current_topic": None,
-        "previous_topics": []
-    }
 
 # Add clear chat function
 def clear_chat():
@@ -81,20 +73,15 @@ if gemini_api_key:
             clear_chat()
             st.session_state.current_session = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         
-        # Add conversation context controls
-        st.sidebar.title("Conversation Context")
-        if st.session_state.context["current_topic"]:
-            st.sidebar.info(f"Current topic: {st.session_state.context['current_topic']}")
-        
-        if st.session_state.context["previous_topics"]:
-            selected_topic = st.sidebar.selectbox(
-                "Previous Topics",
-                st.session_state.context["previous_topics"]
-            )
-            if st.sidebar.button("Return to Topic"):
-                st.chat_message("assistant").markdown(
-                    f"Let's return to discussing {selected_topic}. How can I help you with that?"
-                )
+        # Move memory display entirely to sidebar
+        # st.sidebar.title("Memory Info")
+        # if st.sidebar.button("View My Memory"):
+        # if user_id in user_memory:
+        #     st.sidebar.write(f"Memory history for **{user_id}**:")
+        #     for mem in user_memory[user_id]:
+        #         st.sidebar.write(f"- {mem}")
+        # else:
+        #     st.sidebar.info("No learning history found for this user ID.")
 
         # Display chat history
         for message in st.session_state.messages:
@@ -117,52 +104,28 @@ if gemini_api_key:
                         f"{msg['role']}: {msg['content']}" 
                         for msg in st.session_state.messages[-5:]  # Last 5 messages
                     ])
-
-                    # Process user input with context awareness
-                    relevant_queries = get_relevant_queries(prompt)
                     
-                    # Update context tracking
-                    if relevant_queries[0].startswith("SELECT"):
-                        new_topic = next(
-                            (k for k, v in TELECOM_QUERIES.items() 
-                             if any(kw in prompt.lower() for kw in v["keywords"])),
-                            None
-                        )
-                        if new_topic and new_topic != st.session_state.context["current_topic"]:
-                            if st.session_state.context["current_topic"]:
-                                st.session_state.context["previous_topics"].append(
-                                    st.session_state.context["current_topic"]
-                                )
-                            st.session_state.context["current_topic"] = new_topic
-            
-                    # Prepare the full prompt with context
-                    full_prompt = f"""
-{SYSTEM_PROMPT}
-
-Previous conversation:
+                    # Prepare the full prompt
+                    full_prompt = f"""Previous conversation:
 {conversation_history}
 
 User memories:
 {chr(10).join(relevant_memories[-3:] if relevant_memories else [])}
 
-Related SQL Queries:
-{chr(10).join(relevant_queries)}
-
 Current message: {prompt}
 """
-                    # Update generation config by removing invalid parameter
+                    # Get response from Gemini API
                     generation_config = {
-                        "temperature": 1,
-                        "top_p": 0.95,
-                        "top_k": 40,
-                        "max_output_tokens": 8192,
+                    "temperature": 1,
+                    "top_p": 0.95,
+                    "top_k": 40,
+                    "max_output_tokens": 8192,
+                    "response_mime_type": "text/plain",
                     }
-
                     model = genai.GenerativeModel(
                             model_name="gemini-1.5-flash-8b",
                             generation_config=generation_config,
-                    )
-
+                            )
                     response = model.generate_content(full_prompt)
 
                     if response:
